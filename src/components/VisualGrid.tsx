@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
-import { Upload } from 'lucide-react';
+import { Upload, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface Visual {
@@ -80,6 +79,11 @@ const VisualGrid = () => {
     event.target.value = '';
   };
 
+  const handleDelete = (visualId: string, event: React.MouseEvent) => {
+    event.stopPropagation();
+    setVisuals(prev => prev.filter(visual => visual.id !== visualId));
+  };
+
   const toggleFullscreen = (visual: Visual) => {
     setFullscreenVisual(fullscreenVisual?.id === visual.id ? null : visual);
   };
@@ -133,6 +137,14 @@ const VisualGrid = () => {
                   className="group relative bg-card rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer border border-border hover:scale-[1.02] flex flex-col"
                   onClick={() => toggleFullscreen(visual)}
                 >
+                  {/* Delete button */}
+                  <button
+                    onClick={(e) => handleDelete(visual.id, e)}
+                    className="absolute top-2 right-2 z-10 p-1 bg-destructive text-destructive-foreground rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-destructive/90"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+
                   <div className="flex-1 overflow-hidden">
                     {visual.filename.endsWith('.pdf') ? (
                       <div className="w-full h-full bg-red-50 flex items-center justify-center">
