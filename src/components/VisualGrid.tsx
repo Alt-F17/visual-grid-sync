@@ -1,33 +1,77 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, Trash2 } from 'lucide-react';
+import { Loader2, AlertTriangle, Upload, Trash2 } from 'lucide-react'; // Added Loader2 and AlertTriangle for states
 import { cn } from '@/lib/utils';
 
+// CONFIGURATION: Set your GitHub repository details here
+const GITHUB_REPO_OWNER = 'Alt-F17';
+const GITHUB_REPO_NAME = 'visual-grid-sync';
+const GITHUB_VISUALS_PATH = 'visuals'; // The path to the directory containing your visuals
+
 interface Visual {
-  id: string;
-  url: string;
+  id: string; // Will use file's SHA from GitHub API
+  url: string; // Will use file's download_url
   description: string;
   filename: string;
+}
+
+// --- GitHub API Response Type (for safety) ---
+interface GitHubFile {
+  type: 'file' | 'dir';
+  name: string;
+  path: string;
+  sha: string;
+  download_url: string;
 }
 
 const VisualGrid = () => {
   const [visuals, setVisuals] = useState<Visual[]>([]);
   const [fullscreenVisual, setFullscreenVisual] = useState<Visual | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true); // Changed from isUploading to isLoading
+  const [error, setError] = useState<string | null>(null);
 
-  // Load visuals from localStorage on component mount
+  // Fetch visuals from GitHub on component mount
   useEffect(() => {
-    const savedVisuals = localStorage.getItem('visual-supports');
-    if (savedVisuals) {
-      setVisuals(JSON.parse(savedVisuals));
-    }
-  }, []);
+    const fetchVisualsFromRepo = async () => {
+      setIsLoading(true);
+      setError(null);
+      const apiUrl = `https://api.github.com/repos/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/contents/${GITHUB_VISUALS_PATH}`;
 
-  // Save visuals to localStorage whenever visuals change
-  useEffect(() => {
-    localStorage.setItem('visual-supports', JSON.stringify(visuals));
-  }, [visuals]);
+      try {
+        const response = await fetch(apiUrl);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch from GitHub: ${response.statusText} (Is the repo public and the path correct?)`);
+        }
+        const files: GitHubFile[] = await response.json();
 
-  // Calculate grid layout based on screen space and number of items
+        // Regex for allowed extensions
+        const allowedExtensions = /\.(jpe?g|png|gif|webp|bmp|svg|pdf)$/i;
+
+        const fetchedVisuals = files
+          .filter(file => file.type === 'file' && allowedExtensions.test(file.name))
+          .map((file) => ({
+            id: file.sha,
+            url: file.download_url,
+            filename: file.name,
+            description: file.name
+              .replace(/\.[^/.]+$/, '') // Remove extension
+              .replace(/[-_]/g, ' ') // Replace dashes/underscores
+              .replace(/\b\w/g, l => l.toUpperCase()), // Capitalize words
+          }));
+
+        setVisuals(fetchedVisuals);
+
+      } catch (err: any) {
+        console.error("Error fetching visuals:", err);
+        setError(err.message);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchVisualsFromRepo();
+  }, []); // Empty dependency array means this runs only once on mount
+
+  // Calculate grid layout (no changes needed)
   const getGridLayout = (count: number) => {
     if (count === 0) return { cols: 'grid-cols-1', rows: 'grid-rows-1' };
     if (count === 1) return { cols: 'grid-cols-1', rows: 'grid-rows-1' };
@@ -40,50 +84,6 @@ const VisualGrid = () => {
     return { cols: 'grid-cols-5', rows: 'grid-rows-4' };
   };
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    if (!files) return;
-
-    setIsUploading(true);
-
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      
-      // Check if file is an image or PDF
-      const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp', 'image/bmp', 'image/svg+xml', 'application/pdf'];
-      if (!validTypes.includes(file.type)) {
-        continue;
-      }
-
-      // Create file URL
-      const url = URL.createObjectURL(file);
-      
-      // Generate description based on filename
-      const description = file.name
-        .replace(/\.[^/.]+$/, '') // Remove extension
-        .replace(/[-_]/g, ' ') // Replace dashes and underscores with spaces
-        .replace(/\b\w/g, l => l.toUpperCase()); // Capitalize first letter of each word
-
-      const newVisual: Visual = {
-        id: `${Date.now()}-${i}`,
-        url,
-        description,
-        filename: file.name
-      };
-
-      setVisuals(prev => [...prev, newVisual]);
-    }
-
-    setIsUploading(false);
-    // Clear the input
-    event.target.value = '';
-  };
-
-  const handleDelete = (visualId: string, event: React.MouseEvent) => {
-    event.stopPropagation();
-    setVisuals(prev => prev.filter(visual => visual.id !== visualId));
-  };
-
   const toggleFullscreen = (visual: Visual) => {
     setFullscreenVisual(fullscreenVisual?.id === visual.id ? null : visual);
   };
@@ -94,110 +94,92 @@ const VisualGrid = () => {
 
   const gridLayout = getGridLayout(visuals.length);
 
+  const renderContent = () => {
+    if (isLoading) {
+      return (
+        <div className="h-full flex flex-col items-center justify-center">
+          <Loader2 className="w-12 h-12 text-muted-foreground animate-spin mb-4" />
+          <h3 className="text-lg font-semibold text-foreground">Loading Visuals...</h3>
+          <p className="text-muted-foreground">Fetching from GitHub repository</p>
+        </div>
+      );
+    }
+
+    if (error) {
+       return (
+        <div className="h-full flex flex-col items-center justify-center bg-destructive/10 border-2 border-dashed border-destructive rounded-lg p-4">
+          <AlertTriangle className="w-12 h-12 text-destructive mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-destructive-foreground mb-2">Failed to Load Visuals</h3>
+          <p className="text-sm text-center text-muted-foreground max-w-md">{error}</p>
+        </div>
+      );
+    }
+
+    if (visuals.length === 0) {
+      return (
+        <div className="h-full flex flex-col items-center justify-center border-2 border-dashed border-border rounded-lg">
+          <div className="text-center">
+            <Upload className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-foreground mb-2">No visuals found</h3>
+            <p className="text-muted-foreground">The configured GitHub directory is empty or contains no supported files.</p>
+          </div>
+        </div>
+      );
+    }
+    
+    return (
+      <div className={cn("h-full grid gap-2 auto-rows-fr", gridLayout.cols, gridLayout.rows)}>
+        {visuals.map((visual) => (
+          <div
+            key={visual.id}
+            className="group relative bg-card rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer border border-border hover:scale-[1.02] flex flex-col"
+            onClick={() => toggleFullscreen(visual)}
+          >
+            {/* The delete button is removed as we are in a read-only mode */}
+            <div className="flex-1 overflow-hidden">
+              {visual.filename.endsWith('.pdf') ? (
+                <div className="w-full h-full bg-red-50 flex items-center justify-center">
+                  <div className="text-center">
+                    <div className="text-red-600 text-xl mb-1">📄</div>
+                    <p className="text-xs text-red-600 font-medium">PDF</p>
+                  </div>
+                </div>
+              ) : (
+                <img
+                  src={visual.url}
+                  alt={visual.description}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                />
+              )}
+            </div>
+            <div className="flex-shrink-0 p-2">
+              <h3 className="text-xs font-medium text-card-foreground line-clamp-2">
+                {visual.description}
+              </h3>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+
   return (
     <>
       <div className="h-screen bg-background flex flex-col overflow-hidden">
-        {/* Header - Fixed height */}
+        {/* Header (no change) */}
         <div className="flex-shrink-0 p-4 text-center">
           <h1 className="text-2xl font-bold text-foreground mb-1">Visual Supports</h1>
-          <p className="text-sm text-muted-foreground">Upload and organize your visual documents</p>
+          <p className="text-sm text-muted-foreground">Loaded from a GitHub Repository</p>
         </div>
 
-        {/* Main content area - Fills remaining space */}
+        {/* Main content area */}
         <div className="flex-1 px-4 pb-4 min-h-0">
-          {visuals.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center border-2 border-dashed border-border rounded-lg">
-              <div className="text-center">
-                <Upload className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-foreground mb-2">No visuals yet</h3>
-                <p className="text-muted-foreground mb-6">Upload your first visual support to get started</p>
-                <label className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg cursor-pointer hover:bg-primary/90 transition-colors">
-                  <Upload className="w-4 h-4" />
-                  Upload Files
-                  <input
-                    type="file"
-                    multiple
-                    accept="image/*,.pdf"
-                    onChange={handleFileUpload}
-                    className="hidden"
-                    disabled={isUploading}
-                  />
-                </label>
-              </div>
-            </div>
-          ) : (
-            <div className={cn(
-              "h-full grid gap-2 auto-rows-fr",
-              gridLayout.cols,
-              gridLayout.rows
-            )}>
-              {visuals.map((visual) => (
-                <div
-                  key={visual.id}
-                  className="group relative bg-card rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer border border-border hover:scale-[1.02] flex flex-col"
-                  onClick={() => toggleFullscreen(visual)}
-                >
-                  {/* Delete button */}
-                  <button
-                    onClick={(e) => handleDelete(visual.id, e)}
-                    className="absolute top-2 right-2 z-10 p-1 bg-destructive text-destructive-foreground rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-destructive/90"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
-
-                  <div className="flex-1 overflow-hidden">
-                    {visual.filename.endsWith('.pdf') ? (
-                      <div className="w-full h-full bg-red-50 flex items-center justify-center">
-                        <div className="text-center">
-                          <div className="text-red-600 text-xl mb-1">📄</div>
-                          <p className="text-xs text-red-600 font-medium">PDF</p>
-                        </div>
-                      </div>
-                    ) : (
-                      <img
-                        src={visual.url}
-                        alt={visual.description}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
-                      />
-                    )}
-                  </div>
-                  <div className="flex-shrink-0 p-2">
-                    <h3 className="text-xs font-medium text-card-foreground line-clamp-2">
-                      {visual.description}
-                    </h3>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          {renderContent()}
         </div>
-
-        {/* Upload Button - Fixed position */}
-        {visuals.length > 0 && (
-          <div className="fixed bottom-4 right-4">
-            <label className="flex items-center justify-center w-12 h-12 bg-primary text-primary-foreground rounded-full shadow-lg cursor-pointer hover:bg-primary/90 transition-all duration-200 hover:scale-105">
-              <Upload className="w-5 h-5" />
-              <input
-                type="file"
-                multiple
-                accept="image/*,.pdf"
-                onChange={handleFileUpload}
-                className="hidden"
-                disabled={isUploading}
-              />
-            </label>
-          </div>
-        )}
-
-        {/* Loading indicator */}
-        {isUploading && (
-          <div className="fixed bottom-4 left-4 bg-primary text-primary-foreground px-3 py-2 rounded-lg shadow-lg animate-fade-in text-sm">
-            Uploading...
-          </div>
-        )}
       </div>
-
-      {/* Fullscreen Modal */}
+      
+      {/* Fullscreen Modal (no change) */}
       {fullscreenVisual && (
         <div
           className="fixed inset-0 bg-black bg-opacity-95 flex items-center justify-center z-50 cursor-pointer animate-fade-in p-4"
