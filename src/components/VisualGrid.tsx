@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Upload } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -27,14 +28,17 @@ const VisualGrid = () => {
     localStorage.setItem('visual-supports', JSON.stringify(visuals));
   }, [visuals]);
 
-  // Calculate grid columns based on number of items
-  const getGridColumns = (count: number) => {
-    if (count === 0) return 'grid-cols-1';
-    if (count === 1) return 'grid-cols-1';
-    if (count <= 4) return 'grid-cols-2';
-    if (count <= 9) return 'grid-cols-3';
-    if (count <= 16) return 'grid-cols-4';
-    return 'grid-cols-5';
+  // Calculate grid layout based on screen space and number of items
+  const getGridLayout = (count: number) => {
+    if (count === 0) return { cols: 'grid-cols-1', rows: 'grid-rows-1' };
+    if (count === 1) return { cols: 'grid-cols-1', rows: 'grid-rows-1' };
+    if (count <= 2) return { cols: 'grid-cols-2', rows: 'grid-rows-1' };
+    if (count <= 4) return { cols: 'grid-cols-2', rows: 'grid-rows-2' };
+    if (count <= 6) return { cols: 'grid-cols-3', rows: 'grid-rows-2' };
+    if (count <= 9) return { cols: 'grid-cols-3', rows: 'grid-rows-3' };
+    if (count <= 12) return { cols: 'grid-cols-4', rows: 'grid-rows-3' };
+    if (count <= 16) return { cols: 'grid-cols-4', rows: 'grid-rows-4' };
+    return { cols: 'grid-cols-5', rows: 'grid-rows-4' };
   };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -84,22 +88,26 @@ const VisualGrid = () => {
     setFullscreenVisual(null);
   };
 
+  const gridLayout = getGridLayout(visuals.length);
+
   return (
     <>
-      <div className="min-h-screen bg-background p-4 md:p-8">
-        <div className="max-w-7xl mx-auto">
-          <div className="mb-8 text-center">
-            <h1 className="text-4xl font-bold text-foreground mb-2">Visual Supports</h1>
-            <p className="text-muted-foreground">Upload and organize your visual documents</p>
-          </div>
+      <div className="h-screen bg-background flex flex-col overflow-hidden">
+        {/* Header - Fixed height */}
+        <div className="flex-shrink-0 p-4 text-center">
+          <h1 className="text-2xl font-bold text-foreground mb-1">Visual Supports</h1>
+          <p className="text-sm text-muted-foreground">Upload and organize your visual documents</p>
+        </div>
 
+        {/* Main content area - Fills remaining space */}
+        <div className="flex-1 px-4 pb-4 min-h-0">
           {visuals.length === 0 ? (
-            <div className="flex flex-col items-center justify-center min-h-[400px] border-2 border-dashed border-border rounded-lg">
+            <div className="h-full flex flex-col items-center justify-center border-2 border-dashed border-border rounded-lg">
               <div className="text-center">
-                <Upload className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-xl font-semibold text-foreground mb-2">No visuals yet</h3>
+                <Upload className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-foreground mb-2">No visuals yet</h3>
                 <p className="text-muted-foreground mb-6">Upload your first visual support to get started</p>
-                <label className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-lg cursor-pointer hover:bg-primary/90 transition-colors">
+                <label className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg cursor-pointer hover:bg-primary/90 transition-colors">
                   <Upload className="w-4 h-4" />
                   Upload Files
                   <input
@@ -115,21 +123,22 @@ const VisualGrid = () => {
             </div>
           ) : (
             <div className={cn(
-              "grid gap-4 md:gap-6 auto-rows-fr",
-              getGridColumns(visuals.length)
+              "h-full grid gap-2 auto-rows-fr",
+              gridLayout.cols,
+              gridLayout.rows
             )}>
               {visuals.map((visual) => (
                 <div
                   key={visual.id}
-                  className="group relative bg-card rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer border border-border hover:scale-105"
+                  className="group relative bg-card rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer border border-border hover:scale-[1.02] flex flex-col"
                   onClick={() => toggleFullscreen(visual)}
                 >
-                  <div className="aspect-square overflow-hidden">
+                  <div className="flex-1 overflow-hidden">
                     {visual.filename.endsWith('.pdf') ? (
                       <div className="w-full h-full bg-red-50 flex items-center justify-center">
                         <div className="text-center">
-                          <div className="text-red-600 text-2xl mb-2">📄</div>
-                          <p className="text-sm text-red-600 font-medium">PDF Document</p>
+                          <div className="text-red-600 text-xl mb-1">📄</div>
+                          <p className="text-xs text-red-600 font-medium">PDF</p>
                         </div>
                       </div>
                     ) : (
@@ -140,8 +149,8 @@ const VisualGrid = () => {
                       />
                     )}
                   </div>
-                  <div className="p-3">
-                    <h3 className="text-sm font-medium text-card-foreground line-clamp-2">
+                  <div className="flex-shrink-0 p-2">
+                    <h3 className="text-xs font-medium text-card-foreground line-clamp-2">
                       {visual.description}
                     </h3>
                   </div>
@@ -153,9 +162,9 @@ const VisualGrid = () => {
 
         {/* Upload Button - Fixed position */}
         {visuals.length > 0 && (
-          <div className="fixed bottom-6 right-6">
-            <label className="flex items-center justify-center w-14 h-14 bg-primary text-primary-foreground rounded-full shadow-lg cursor-pointer hover:bg-primary/90 transition-all duration-200 hover:scale-105">
-              <Upload className="w-6 h-6" />
+          <div className="fixed bottom-4 right-4">
+            <label className="flex items-center justify-center w-12 h-12 bg-primary text-primary-foreground rounded-full shadow-lg cursor-pointer hover:bg-primary/90 transition-all duration-200 hover:scale-105">
+              <Upload className="w-5 h-5" />
               <input
                 type="file"
                 multiple
@@ -170,7 +179,7 @@ const VisualGrid = () => {
 
         {/* Loading indicator */}
         {isUploading && (
-          <div className="fixed bottom-6 left-6 bg-primary text-primary-foreground px-4 py-2 rounded-lg shadow-lg animate-fade-in">
+          <div className="fixed bottom-4 left-4 bg-primary text-primary-foreground px-3 py-2 rounded-lg shadow-lg animate-fade-in text-sm">
             Uploading...
           </div>
         )}
@@ -179,12 +188,12 @@ const VisualGrid = () => {
       {/* Fullscreen Modal */}
       {fullscreenVisual && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 cursor-pointer animate-fade-in"
+          className="fixed inset-0 bg-black bg-opacity-95 flex items-center justify-center z-50 cursor-pointer animate-fade-in p-4"
           onClick={closeFullscreen}
         >
-          <div className="relative max-w-full max-h-full p-4 animate-scale-in">
+          <div className="relative w-full h-full flex items-center justify-center animate-scale-in">
             {fullscreenVisual.filename.endsWith('.pdf') ? (
-              <div className="bg-white p-8 rounded-lg text-center">
+              <div className="bg-white p-8 rounded-lg text-center max-w-md">
                 <div className="text-6xl mb-4">📄</div>
                 <h2 className="text-2xl font-bold text-gray-800 mb-2">PDF Document</h2>
                 <p className="text-gray-600">{fullscreenVisual.description}</p>
@@ -197,8 +206,8 @@ const VisualGrid = () => {
                 className="max-w-full max-h-full object-contain"
               />
             )}
-            <div className="absolute bottom-4 left-4 right-4 text-center">
-              <p className="text-white text-lg font-medium bg-black bg-opacity-50 px-4 py-2 rounded-lg">
+            <div className="absolute bottom-8 left-8 right-8 text-center">
+              <p className="text-white text-lg font-medium bg-black bg-opacity-60 px-4 py-2 rounded-lg backdrop-blur-sm">
                 {fullscreenVisual.description}
               </p>
             </div>
