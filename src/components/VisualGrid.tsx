@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Upload } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -81,8 +80,7 @@ const VisualGrid = () => {
     setFullscreenVisual(fullscreenVisual?.id === visual.id ? null : visual);
   };
 
-  const handleFullscreenClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const closeFullscreen = () => {
     setFullscreenVisual(null);
   };
 
@@ -123,7 +121,7 @@ const VisualGrid = () => {
               {visuals.map((visual) => (
                 <div
                   key={visual.id}
-                  className="group relative bg-card rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer border border-border"
+                  className="group relative bg-card rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer border border-border hover:scale-105"
                   onClick={() => toggleFullscreen(visual)}
                 >
                   <div className="aspect-square overflow-hidden">
@@ -172,7 +170,7 @@ const VisualGrid = () => {
 
         {/* Loading indicator */}
         {isUploading && (
-          <div className="fixed bottom-6 left-6 bg-primary text-primary-foreground px-4 py-2 rounded-lg shadow-lg">
+          <div className="fixed bottom-6 left-6 bg-primary text-primary-foreground px-4 py-2 rounded-lg shadow-lg animate-fade-in">
             Uploading...
           </div>
         )}
@@ -181,10 +179,10 @@ const VisualGrid = () => {
       {/* Fullscreen Modal */}
       {fullscreenVisual && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 cursor-pointer"
-          onClick={handleFullscreenClick}
+          className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 cursor-pointer animate-fade-in"
+          onClick={closeFullscreen}
         >
-          <div className="relative max-w-full max-h-full p-4">
+          <div className="relative max-w-full max-h-full p-4 animate-scale-in">
             {fullscreenVisual.filename.endsWith('.pdf') ? (
               <div className="bg-white p-8 rounded-lg text-center">
                 <div className="text-6xl mb-4">📄</div>
@@ -197,7 +195,6 @@ const VisualGrid = () => {
                 src={fullscreenVisual.url}
                 alt={fullscreenVisual.description}
                 className="max-w-full max-h-full object-contain"
-                onClick={(e) => e.stopPropagation()}
               />
             )}
             <div className="absolute bottom-4 left-4 right-4 text-center">
