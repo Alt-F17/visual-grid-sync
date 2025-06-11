@@ -1,8 +1,6 @@
-
 import React, { useState, useEffect } from 'react';
 import { Upload, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { visualStorage } from '@/utils/storage';
 
 interface Visual {
   id: string;
@@ -15,37 +13,19 @@ const VisualGrid = () => {
   const [visuals, setVisuals] = useState<Visual[]>([]);
   const [fullscreenVisual, setFullscreenVisual] = useState<Visual | null>(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
 
-  // Load visuals from IndexedDB on component mount
+  // Load visuals from localStorage on component mount
   useEffect(() => {
-    const loadVisuals = async () => {
-      try {
-        await visualStorage.init();
-        const storedVisuals = await visualStorage.getAllVisuals();
-        
-        const visualsWithUrls = await Promise.all(
-          storedVisuals.map(async (stored) => {
-            const url = await visualStorage.getVisual(stored.id);
-            return {
-              id: stored.id,
-              url: url || '',
-              description: stored.metadata.description,
-              filename: stored.metadata.filename
-            };
-          })
-        );
-        
-        setVisuals(visualsWithUrls);
-      } catch (error) {
-        console.error('Failed to load visuals:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadVisuals();
+    const savedVisuals = localStorage.getItem('visual-supports');
+    if (savedVisuals) {
+      setVisuals(JSON.parse(savedVisuals));
+    }
   }, []);
+
+  // Save visuals to localStorage whenever visuals change
+  useEffect(() => {
+    localStorage.setItem('visual-supports', JSON.stringify(visuals));
+  }, [visuals]);
 
   // Calculate grid layout based on screen space and number of items
   const getGridLayout = (count: number) => {
@@ -75,34 +55,23 @@ const VisualGrid = () => {
         continue;
       }
 
+      // Create file URL
+      const url = URL.createObjectURL(file);
+      
       // Generate description based on filename
       const description = file.name
         .replace(/\.[^/.]+$/, '') // Remove extension
         .replace(/[-_]/g, ' ') // Replace dashes and underscores with spaces
         .replace(/\b\w/g, l => l.toUpperCase()); // Capitalize first letter of each word
 
-      const id = `${Date.now()}-${i}`;
-      
-      try {
-        // Store file in IndexedDB
-        await visualStorage.storeVisual(id, file, { description, filename: file.name });
-        
-        // Get URL for display
-        const url = await visualStorage.getVisual(id);
-        
-        if (url) {
-          const newVisual: Visual = {
-            id,
-            url,
-            description,
-            filename: file.name
-          };
+      const newVisual: Visual = {
+        id: `${Date.now()}-${i}`,
+        url,
+        description,
+        filename: file.name
+      };
 
-          setVisuals(prev => [...prev, newVisual]);
-        }
-      } catch (error) {
-        console.error('Failed to store visual:', error);
-      }
+      setVisuals(prev => [...prev, newVisual]);
     }
 
     setIsUploading(false);
@@ -110,18 +79,9 @@ const VisualGrid = () => {
     event.target.value = '';
   };
 
-  const handleDelete = async (visualId: string, event: React.MouseEvent) => {
+  const handleDelete = (visualId: string, event: React.MouseEvent) => {
     event.stopPropagation();
-    
-    try {
-      // Delete from IndexedDB
-      await visualStorage.deleteVisual(visualId);
-      
-      // Update state
-      setVisuals(prev => prev.filter(visual => visual.id !== visualId));
-    } catch (error) {
-      console.error('Failed to delete visual:', error);
-    }
+    setVisuals(prev => prev.filter(visual => visual.id !== visualId));
   };
 
   const toggleFullscreen = (visual: Visual) => {
@@ -133,17 +93,6 @@ const VisualGrid = () => {
   };
 
   const gridLayout = getGridLayout(visuals.length);
-
-  if (isLoading) {
-    return (
-      <div className="h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading visuals...</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <>
@@ -251,10 +200,10 @@ const VisualGrid = () => {
       {/* Fullscreen Modal */}
       {fullscreenVisual && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-95 flex items-center justify-center z-50 cursor-pointer animate-zoom-in p-4"
+          className="fixed inset-0 bg-black bg-opacity-95 flex items-center justify-center z-50 cursor-pointer animate-fade-in p-4"
           onClick={closeFullscreen}
         >
-          <div className="relative w-full h-full flex items-center justify-center">
+          <div className="relative w-full h-full flex items-center justify-center animate-scale-in">
             {fullscreenVisual.filename.endsWith('.pdf') ? (
               <div className="bg-white p-8 rounded-lg text-center max-w-md">
                 <div className="text-6xl mb-4">📄</div>
