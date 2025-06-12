@@ -194,6 +194,7 @@ const VisualGrid: React.FC = () => {
             description: `${file.name} uploaded successfully`,
           });
 
+          // Refresh the visuals list after upload
           await fetchVisuals(pat);
           setFile(null);
         } catch (err) {
