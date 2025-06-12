@@ -19,9 +19,9 @@ const VisualGrid: React.FC = () => {
   const [error, setError] = useState<string>('');
 
   // Hardcoded encrypted PAT (generated separately)
-  const encryptedPAT = 'U2FsdGVkX19Xz5Qz7X8z5Qz7X8z5Qz7X8z5Qz7X8z5Qz7X8z5Qz7X8z5Qz7X8z5Q=='; // Example encrypted value
-  const repoOwner = 'your-username';
-  const repoName = 'your-repo';
+  const encryptedPAT = 'U2FsdGVkX19oWeTSn+eeUryDHjI/zyXp8SViwjPqi104hlQa8cVVClKREJ81ugeV5Ye8+6BsWaboTRuItKaHuQ=='; // Example encrypted value
+  const repoOwner = 'Alt-F17';
+  const repoName = 'visual-grid-sync';
   const folderPath = 'visuals'; // Folder in repo where visuals are stored
 
   // Decrypt PAT using the provided secret key
