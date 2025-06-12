@@ -1,5 +1,11 @@
+
 import React, { useState, useEffect } from 'react';
 import CryptoJS from 'crypto-js';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent } from '@/components/ui/card';
+import { Trash2, Upload, Lock, Eye } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
 // Define types for TypeScript
 interface Visual {
@@ -15,13 +21,14 @@ const VisualGrid: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [file, setFile] = useState<File | null>(null);
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
-  const [error, setError] = useState<string>('');
+  const [loading, setLoading] = useState<boolean>(false);
+  const { toast } = useToast();
 
   // Hardcoded encrypted PAT (generated separately)
-  const encryptedPAT = 'U2FsdGVkX19oWeTSn+eeUryDHjI/zyXp8SViwjPqi104hlQa8cVVClKREJ81ugeV5Ye8+6BsWaboTRuItKaHuQ=='; // Example encrypted value
+  const encryptedPAT = 'U2FsdGVkX19oWeTSn+eeUryDHjI/zyXp8SViwjPqi104hlQa8cVVClKREJ81ugeV5Ye8+6BsWaboTRuItKaHuQ==';
   const repoOwner = 'Alt-F17';
   const repoName = 'visual-grid-sync';
-  const folderPath = 'visuals'; // Folder in repo where visuals are stored
+  const folderPath = 'visuals';
 
   // Decrypt PAT using the provided secret key
   const decryptPAT = (key: string): string | null => {
@@ -29,6 +36,7 @@ const VisualGrid: React.FC = () => {
       const bytes = CryptoJS.AES.decrypt(encryptedPAT, key);
       return bytes.toString(CryptoJS.enc.Utf8);
     } catch (err) {
+      console.error('Decryption error:', err);
       return null;
     }
   };
@@ -36,6 +44,7 @@ const VisualGrid: React.FC = () => {
   // Fetch visuals from GitHub
   const fetchVisuals = async (pat: string) => {
     try {
+      setLoading(true);
       const response = await fetch(
         `https://api.github.com/repos/${repoOwner}/${repoName}/contents/${folderPath}`,
         {
@@ -45,83 +54,203 @@ const VisualGrid: React.FC = () => {
           },
         }
       );
-      if (!response.ok) throw new Error('Failed to fetch visuals');
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch visuals: ${response.status} ${response.statusText}`);
+      }
+      
       const data: Visual[] = await response.json();
-      setVisuals(data.filter((item) => /\.(jpg|jpeg|png|pdf)$/i.test(item.name)));
+      const imageFiles = data.filter((item) => /\.(jpg|jpeg|png|pdf)$/i.test(item.name));
+      setVisuals(imageFiles);
+      
+      toast({
+        title: "Success",
+        description: `Loaded ${imageFiles.length} visuals`,
+      });
     } catch (err) {
-      setError('Error fetching visuals');
+      console.error('Fetch visuals error:', err);
+      toast({
+        title: "Error",
+        description: "Failed to fetch visuals from GitHub",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
   // Verify the secret key by attempting a lightweight API call
   const verifyKey = async () => {
-    const pat = decryptPAT(secretKey);
-    if (!pat) {
-      setError('Invalid secret key');
+    if (!secretKey.trim()) {
+      toast({
+        title: "Error",
+        description: "Please enter a secret key",
+        variant: "destructive",
+      });
       return;
     }
+
     try {
+      setLoading(true);
+      const pat = decryptPAT(secretKey);
+      if (!pat) {
+        toast({
+          title: "Error",
+          description: "Invalid secret key",
+          variant: "destructive",
+        });
+        return;
+      }
+
       const response = await fetch(`https://api.github.com/user`, {
         headers: {
           Authorization: `token ${pat}`,
           Accept: 'application/vnd.github.v3+json',
         },
       });
+
       if (response.ok) {
         setIsAuthenticated(true);
-        setError('');
-        fetchVisuals(pat);
+        toast({
+          title: "Success",
+          description: "Authentication successful",
+        });
+        await fetchVisuals(pat);
       } else {
-        setError('Authentication failed');
+        throw new Error(`Authentication failed: ${response.status}`);
       }
     } catch (err) {
-      setError('Error verifying key');
+      console.error('Verify key error:', err);
+      toast({
+        title: "Error",
+        description: "Authentication failed",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
   // Upload a file to GitHub
   const uploadFile = async () => {
-    if (!file || !isAuthenticated) return;
-    const pat = decryptPAT(secretKey);
-    if (!pat) return;
+    if (!file) {
+      toast({
+        title: "Error",
+        description: "Please select a file to upload",
+        variant: "destructive",
+      });
+      return;
+    }
 
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      const content = e.target?.result as string;
-      const base64Content = content.split(',')[1]; // Remove data URL prefix
+    if (!secretKey.trim()) {
+      toast({
+        title: "Error",
+        description: "Secret key is required for upload",
+        variant: "destructive",
+      });
+      return;
+    }
 
-      try {
-        const response = await fetch(
-          `https://api.github.com/repos/${repoOwner}/${repoName}/contents/${folderPath}/${file.name}`,
-          {
-            method: 'PUT',
-            headers: {
-              Authorization: `token ${pat}`,
-              Accept: 'application/vnd.github.v3+json',
-            },
-            body: JSON.stringify({
-              message: `Upload ${file.name}`,
-              content: base64Content,
-            }),
-          }
-        );
-        if (!response.ok) throw new Error('Upload failed');
-        fetchVisuals(pat); // Refresh visuals
-        setFile(null);
-      } catch (err) {
-        setError('Error uploading file');
+    try {
+      setLoading(true);
+      const pat = decryptPAT(secretKey);
+      if (!pat) {
+        toast({
+          title: "Error",
+          description: "Invalid secret key",
+          variant: "destructive",
+        });
+        return;
       }
-    };
-    reader.readAsDataURL(file);
+
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const content = e.target?.result as string;
+          const base64Content = content.split(',')[1];
+
+          const response = await fetch(
+            `https://api.github.com/repos/${repoOwner}/${repoName}/contents/${folderPath}/${file.name}`,
+            {
+              method: 'PUT',
+              headers: {
+                Authorization: `token ${pat}`,
+                Accept: 'application/vnd.github.v3+json',
+              },
+              body: JSON.stringify({
+                message: `Upload ${file.name}`,
+                content: base64Content,
+              }),
+            }
+          );
+
+          if (!response.ok) {
+            throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
+          }
+
+          toast({
+            title: "Success",
+            description: `${file.name} uploaded successfully`,
+          });
+
+          await fetchVisuals(pat);
+          setFile(null);
+        } catch (err) {
+          console.error('Upload error:', err);
+          toast({
+            title: "Error",
+            description: "Failed to upload file",
+            variant: "destructive",
+          });
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      reader.onerror = () => {
+        toast({
+          title: "Error",
+          description: "Failed to read file",
+          variant: "destructive",
+        });
+        setLoading(false);
+      };
+
+      reader.readAsDataURL(file);
+    } catch (err) {
+      console.error('Upload preparation error:', err);
+      toast({
+        title: "Error",
+        description: "Failed to prepare file for upload",
+        variant: "destructive",
+      });
+      setLoading(false);
+    }
   };
 
   // Delete a file from GitHub
   const deleteFile = async (sha: string, fileName: string) => {
-    if (!isAuthenticated) return;
-    const pat = decryptPAT(secretKey);
-    if (!pat) return;
+    if (!secretKey.trim()) {
+      toast({
+        title: "Error",
+        description: "Secret key is required for deletion",
+        variant: "destructive",
+      });
+      return;
+    }
 
     try {
+      setLoading(true);
+      const pat = decryptPAT(secretKey);
+      if (!pat) {
+        toast({
+          title: "Error",
+          description: "Invalid secret key",
+          variant: "destructive",
+        });
+        return;
+      }
+
       const response = await fetch(
         `https://api.github.com/repos/${repoOwner}/${repoName}/contents/${folderPath}/${fileName}`,
         {
@@ -136,76 +265,231 @@ const VisualGrid: React.FC = () => {
           }),
         }
       );
-      if (!response.ok) throw new Error('Delete failed');
-      fetchVisuals(pat); // Refresh visuals
+
+      if (!response.ok) {
+        throw new Error(`Delete failed: ${response.status} ${response.statusText}`);
+      }
+
+      toast({
+        title: "Success",
+        description: `${fileName} deleted successfully`,
+      });
+
+      await fetchVisuals(pat);
     } catch (err) {
-      setError('Error deleting file');
+      console.error('Delete error:', err);
+      toast({
+        title: "Error",
+        description: "Failed to delete file",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
   // Handle fullscreen view
-  const openFullscreen = (url: string) => setFullscreenImage(url);
-  const closeFullscreen = () => setFullscreenImage(null);
+  const openFullscreen = (url: string) => {
+    try {
+      setFullscreenImage(url);
+    } catch (err) {
+      console.error('Fullscreen error:', err);
+      toast({
+        title: "Error",
+        description: "Failed to open fullscreen view",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const closeFullscreen = () => {
+    try {
+      setFullscreenImage(null);
+    } catch (err) {
+      console.error('Close fullscreen error:', err);
+    }
+  };
 
   return (
-    <div className="visual-grid-container">
-      <h1>Visual Grid</h1>
-
-      {/* Secret Key Input */}
-      {!isAuthenticated && (
-        <div className="auth-section">
-          <input
-            type="password"
-            value={secretKey}
-            onChange={(e) => setSecretKey(e.target.value)}
-            placeholder="Enter secret key"
-          />
-          <button onClick={verifyKey}>Submit</button>
-          {error && <p className="error">{error}</p>}
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <h1 className="text-4xl font-bold text-slate-800 mb-2">Visual Grid</h1>
+          <p className="text-slate-600">Manage your visual assets with GitHub integration</p>
         </div>
-      )}
 
-      {/* Upload Section */}
-      {isAuthenticated && (
-        <div className="upload-section">
-          <input
-            type="file"
-            accept="image/*,.pdf"
-            onChange={(e) => setFile(e.target.files?.[0] || null)}
-          />
-          <button onClick={uploadFile} disabled={!file}>
-            Upload
-          </button>
-          {error && <p className="error">{error}</p>}
-        </div>
-      )}
-
-      {/* Visuals Grid */}
-      {isAuthenticated && (
-        <div className="grid">
-          {visuals.map((visual) => (
-            <div key={visual.sha} className="grid-item">
-              {visual.name.endsWith('.pdf') ? (
-                <embed src={visual.download_url} type="application/pdf" width="100" height="100" />
-              ) : (
-                <img
-                  src={visual.download_url}
-                  alt={visual.name}
-                  onClick={() => openFullscreen(visual.download_url)}
+        {/* Authentication Section */}
+        {!isAuthenticated && (
+          <Card className="mb-8 max-w-md mx-auto">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <Lock className="h-5 w-5 text-slate-600" />
+                <h2 className="text-lg font-semibold text-slate-800">Authentication Required</h2>
+              </div>
+              <div className="space-y-4">
+                <Input
+                  type="password"
+                  value={secretKey}
+                  onChange={(e) => setSecretKey(e.target.value)}
+                  placeholder="Enter secret key"
+                  className="w-full"
+                  onKeyPress={(e) => e.key === 'Enter' && verifyKey()}
                 />
-              )}
-              <button onClick={() => deleteFile(visual.sha, visual.name)}>Delete</button>
-            </div>
-          ))}
-        </div>
-      )}
+                <Button 
+                  onClick={verifyKey} 
+                  disabled={loading || !secretKey.trim()}
+                  className="w-full"
+                >
+                  {loading ? 'Verifying...' : 'Authenticate'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
-      {/* Fullscreen View */}
-      {fullscreenImage && (
-        <div className="fullscreen" onClick={closeFullscreen}>
-          <img src={fullscreenImage} alt="Fullscreen view" />
-        </div>
-      )}
+        {/* Upload Section */}
+        {isAuthenticated && (
+          <Card className="mb-8">
+            <CardContent className="p-6">
+              <h2 className="text-lg font-semibold text-slate-800 mb-4">Upload New Visual</h2>
+              <div className="flex flex-col sm:flex-row gap-4 items-end">
+                <div className="flex-1">
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Select File
+                  </label>
+                  <Input
+                    type="file"
+                    accept="image/*,.pdf"
+                    onChange={(e) => setFile(e.target.files?.[0] || null)}
+                    className="w-full"
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Secret Key (Required)
+                  </label>
+                  <Input
+                    type="password"
+                    value={secretKey}
+                    onChange={(e) => setSecretKey(e.target.value)}
+                    placeholder="Enter secret key"
+                    className="w-full"
+                  />
+                </div>
+                <Button 
+                  onClick={uploadFile} 
+                  disabled={loading || !file || !secretKey.trim()}
+                  className="flex items-center gap-2"
+                >
+                  <Upload className="h-4 w-4" />
+                  {loading ? 'Uploading...' : 'Upload'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Visuals Grid */}
+        {isAuthenticated && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 auto-rows-fr max-h-[60vh] overflow-hidden">
+            {visuals.map((visual) => (
+              <Card key={visual.sha} className="group relative overflow-hidden hover:shadow-lg transition-shadow">
+                <CardContent className="p-0 aspect-square">
+                  {visual.name.endsWith('.pdf') ? (
+                    <div className="w-full h-full bg-red-50 flex items-center justify-center">
+                      <span className="text-red-600 text-xs font-medium">PDF</span>
+                    </div>
+                  ) : (
+                    <img
+                      src={visual.download_url}
+                      alt={visual.name}
+                      className="w-full h-full object-cover cursor-pointer transition-transform group-hover:scale-105"
+                      onClick={() => openFullscreen(visual.download_url)}
+                      onError={(e) => {
+                        console.error('Image load error:', e);
+                        (e.target as HTMLImageElement).src = '/placeholder.svg';
+                      }}
+                    />
+                  )}
+                  
+                  {/* Action Buttons */}
+                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                    {!visual.name.endsWith('.pdf') && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => openFullscreen(visual.download_url)}
+                        className="bg-white/90 hover:bg-white"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => deleteFile(visual.sha, visual.name)}
+                      disabled={loading}
+                      className="bg-red-500/90 hover:bg-red-600"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+
+        {/* Loading State */}
+        {loading && (
+          <div className="text-center py-8">
+            <div className="inline-flex items-center gap-2 text-slate-600">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-slate-600"></div>
+              Processing...
+            </div>
+          </div>
+        )}
+
+        {/* Empty State */}
+        {isAuthenticated && !loading && visuals.length === 0 && (
+          <div className="text-center py-12">
+            <p className="text-slate-500">No visuals found. Upload your first visual to get started!</p>
+          </div>
+        )}
+
+        {/* Fullscreen View */}
+        {fullscreenImage && (
+          <div 
+            className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4"
+            onClick={closeFullscreen}
+          >
+            <img 
+              src={fullscreenImage} 
+              alt="Fullscreen view" 
+              className="max-w-full max-h-full object-contain"
+              onClick={(e) => e.stopPropagation()}
+              onError={(e) => {
+                console.error('Fullscreen image error:', e);
+                closeFullscreen();
+                toast({
+                  title: "Error",
+                  description: "Failed to load image",
+                  variant: "destructive",
+                });
+              }}
+            />
+            <Button
+              variant="secondary"
+              size="sm"
+              className="absolute top-4 right-4"
+              onClick={closeFullscreen}
+            >
+              Close
+            </Button>
+          </div>
+        )}
+      </div>
     </div>
   );
 };
