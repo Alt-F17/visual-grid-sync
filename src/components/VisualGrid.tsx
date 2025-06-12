@@ -21,6 +21,7 @@ const VisualGrid: React.FC = () => {
   const [file, setFile] = useState<File | null>(null);
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
+  const [isDragOver, setIsDragOver] = useState<boolean>(false);
   const { toast } = useToast();
 
   // Hardcoded encrypted PAT (generated separately)
@@ -227,6 +228,37 @@ const VisualGrid: React.FC = () => {
     }
   };
 
+  // Handle drag and drop events
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    
+    const droppedFile = e.dataTransfer.files[0];
+    if (droppedFile && (droppedFile.type.startsWith('image/') || droppedFile.type === 'application/pdf')) {
+      setFile(droppedFile);
+      toast({
+        title: "File selected",
+        description: `${droppedFile.name} is ready to upload`,
+      });
+    } else {
+      toast({
+        title: "Invalid file type",
+        description: "Please drop an image or PDF file",
+        variant: "destructive",
+      });
+    }
+  };
+
   // Handle fullscreen view with zoom animation
   const openFullscreen = (url: string) => {
     try {
@@ -307,12 +339,24 @@ const VisualGrid: React.FC = () => {
                   <label className="block text-sm font-medium text-slate-700 mb-2">
                     Select File
                   </label>
-                  <Input
-                    type="file"
-                    accept="image/*,.pdf"
-                    onChange={(e) => setFile(e.target.files?.[0] || null)}
-                    className="w-full"
-                  />
+                  <div
+                    className={`relative ${isDragOver ? 'bg-blue-50 border-blue-300' : 'bg-white border-slate-200'} border-2 border-dashed rounded-lg transition-colors`}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                  >
+                    <Input
+                      type="file"
+                      accept="image/*,.pdf"
+                      onChange={(e) => setFile(e.target.files?.[0] || null)}
+                      className="w-full cursor-pointer file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200 file:cursor-pointer"
+                    />
+                    {isDragOver && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-blue-50/90 rounded-lg">
+                        <p className="text-blue-600 font-medium">Drop file here</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <Button 
                   onClick={uploadFile} 
@@ -378,14 +422,14 @@ const VisualGrid: React.FC = () => {
         {/* Fullscreen View */}
         {fullscreenImage && (
           <div 
-            className="fixed inset-0 bg-black/95 z-50 flex items-center justify-center p-4 animate-zoom-in"
+            className="fixed inset-0 bg-black/95 z-50 flex items-center justify-center p-4 animate-zoom-in cursor-pointer"
             onClick={closeFullscreen}
           >
             <img 
               src={fullscreenImage} 
               alt="Fullscreen view" 
-              className="max-w-full max-h-full object-contain animate-scale-in"
-              onClick={(e) => e.stopPropagation()}
+              className="max-w-full max-h-full object-contain animate-scale-in cursor-pointer"
+              onClick={closeFullscreen}
               onError={(e) => {
                 console.error('Fullscreen image error:', e);
                 closeFullscreen();
@@ -400,7 +444,10 @@ const VisualGrid: React.FC = () => {
               variant="secondary"
               size="sm"
               className="absolute top-4 right-4 bg-white/90 hover:bg-white"
-              onClick={closeFullscreen}
+              onClick={(e) => {
+                e.stopPropagation();
+                closeFullscreen();
+              }}
             >
               <X className="h-4 w-4" />
             </Button>
