@@ -4,7 +4,7 @@ import CryptoJS from 'crypto-js';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
-import { Trash2, Upload, Lock, Eye } from 'lucide-react';
+import { Upload, Lock, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 // Define types for TypeScript
@@ -228,67 +228,7 @@ const VisualGrid: React.FC = () => {
     }
   };
 
-  // Delete a file from GitHub
-  const deleteFile = async (sha: string, fileName: string) => {
-    if (!secretKey.trim()) {
-      toast({
-        title: "Error",
-        description: "Secret key is required for deletion",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    try {
-      setLoading(true);
-      const pat = decryptPAT(secretKey);
-      if (!pat) {
-        toast({
-          title: "Error",
-          description: "Invalid secret key",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      const response = await fetch(
-        `https://api.github.com/repos/${repoOwner}/${repoName}/contents/${folderPath}/${fileName}`,
-        {
-          method: 'DELETE',
-          headers: {
-            Authorization: `token ${pat}`,
-            Accept: 'application/vnd.github.v3+json',
-          },
-          body: JSON.stringify({
-            message: `Delete ${fileName}`,
-            sha,
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(`Delete failed: ${response.status} ${response.statusText}`);
-      }
-
-      toast({
-        title: "Success",
-        description: `${fileName} deleted successfully`,
-      });
-
-      await fetchVisuals(pat);
-    } catch (err) {
-      console.error('Delete error:', err);
-      toast({
-        title: "Error",
-        description: "Failed to delete file",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Handle fullscreen view
+  // Handle fullscreen view with zoom animation
   const openFullscreen = (url: string) => {
     try {
       setFullscreenImage(url);
@@ -321,38 +261,49 @@ const VisualGrid: React.FC = () => {
 
         {/* Authentication Section */}
         {!isAuthenticated && (
-          <Card className="mb-8 max-w-md mx-auto">
-            <CardContent className="p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <Lock className="h-5 w-5 text-slate-600" />
-                <h2 className="text-lg font-semibold text-slate-800">Authentication Required</h2>
-              </div>
-              <div className="space-y-4">
-                <Input
-                  type="password"
-                  value={secretKey}
-                  onChange={(e) => setSecretKey(e.target.value)}
-                  placeholder="Enter secret key"
-                  className="w-full"
-                  onKeyPress={(e) => e.key === 'Enter' && verifyKey()}
-                />
-                <Button 
-                  onClick={verifyKey} 
-                  disabled={loading || !secretKey.trim()}
-                  className="w-full"
-                >
-                  {loading ? 'Verifying...' : 'Authenticate'}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          <div className="flex items-center justify-center min-h-[60vh]">
+            <Card className="w-full max-w-md mx-auto shadow-2xl border-0 bg-white/80 backdrop-blur-sm">
+              <CardContent className="p-8">
+                <div className="text-center mb-8">
+                  <div className="mx-auto w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center mb-4 shadow-lg">
+                    <Lock className="h-8 w-8 text-white" />
+                  </div>
+                  <h2 className="text-2xl font-bold text-slate-800 mb-2">Access Required</h2>
+                  <p className="text-slate-600">Enter your secret key to continue</p>
+                </div>
+                <div className="space-y-6">
+                  <div className="relative">
+                    <Input
+                      type="password"
+                      value={secretKey}
+                      onChange={(e) => setSecretKey(e.target.value)}
+                      placeholder="Enter secret key"
+                      className="w-full h-12 text-center text-lg tracking-wider border-2 border-slate-200 focus:border-blue-500 transition-colors"
+                      onKeyPress={(e) => e.key === 'Enter' && verifyKey()}
+                    />
+                  </div>
+                  <Button 
+                    onClick={verifyKey} 
+                    disabled={loading || !secretKey.trim()}
+                    className="w-full h-12 text-lg font-medium bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 transition-all duration-200 shadow-lg"
+                  >
+                    {loading ? (
+                      <div className="flex items-center gap-2">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        Authenticating...
+                      </div>
+                    ) : 'Unlock Access'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         )}
 
         {/* Upload Section */}
         {isAuthenticated && (
-          <Card className="mb-8">
-            <CardContent className="p-6">
-              <h2 className="text-lg font-semibold text-slate-800 mb-4">Upload New Visual</h2>
+          <Card className="mb-8 shadow-lg border-0 bg-white/90">
+            <CardContent className="p-4">
               <div className="flex flex-col sm:flex-row gap-4 items-end">
                 <div className="flex-1">
                   <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -365,22 +316,10 @@ const VisualGrid: React.FC = () => {
                     className="w-full"
                   />
                 </div>
-                <div className="flex-1">
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Secret Key (Required)
-                  </label>
-                  <Input
-                    type="password"
-                    value={secretKey}
-                    onChange={(e) => setSecretKey(e.target.value)}
-                    placeholder="Enter secret key"
-                    className="w-full"
-                  />
-                </div>
                 <Button 
                   onClick={uploadFile} 
-                  disabled={loading || !file || !secretKey.trim()}
-                  className="flex items-center gap-2"
+                  disabled={loading || !file}
+                  className="flex items-center gap-2 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700"
                 >
                   <Upload className="h-4 w-4" />
                   {loading ? 'Uploading...' : 'Upload'}
@@ -392,19 +331,22 @@ const VisualGrid: React.FC = () => {
 
         {/* Visuals Grid */}
         {isAuthenticated && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 auto-rows-fr max-h-[60vh] overflow-hidden">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 auto-rows-fr max-h-[60vh] overflow-auto">
             {visuals.map((visual) => (
-              <Card key={visual.sha} className="group relative overflow-hidden hover:shadow-lg transition-shadow">
+              <Card key={visual.sha} className="group relative overflow-hidden hover:shadow-lg transition-all duration-300 border-0 bg-white/90">
                 <CardContent className="p-0 aspect-square">
                   {visual.name.endsWith('.pdf') ? (
-                    <div className="w-full h-full bg-red-50 flex items-center justify-center">
+                    <div 
+                      className="w-full h-full bg-red-50 flex items-center justify-center cursor-pointer transition-transform hover:scale-105"
+                      onClick={() => openFullscreen(visual.download_url)}
+                    >
                       <span className="text-red-600 text-xs font-medium">PDF</span>
                     </div>
                   ) : (
                     <img
                       src={visual.download_url}
                       alt={visual.name}
-                      className="w-full h-full object-cover cursor-pointer transition-transform group-hover:scale-105"
+                      className="w-full h-full object-cover cursor-pointer transition-transform hover:scale-105 zoom-click"
                       onClick={() => openFullscreen(visual.download_url)}
                       onError={(e) => {
                         console.error('Image load error:', e);
@@ -412,29 +354,6 @@ const VisualGrid: React.FC = () => {
                       }}
                     />
                   )}
-                  
-                  {/* Action Buttons */}
-                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                    {!visual.name.endsWith('.pdf') && (
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => openFullscreen(visual.download_url)}
-                        className="bg-white/90 hover:bg-white"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                    )}
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      onClick={() => deleteFile(visual.sha, visual.name)}
-                      disabled={loading}
-                      className="bg-red-500/90 hover:bg-red-600"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
                 </CardContent>
               </Card>
             ))}
@@ -461,13 +380,13 @@ const VisualGrid: React.FC = () => {
         {/* Fullscreen View */}
         {fullscreenImage && (
           <div 
-            className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4"
+            className="fixed inset-0 bg-black/95 z-50 flex items-center justify-center p-4 animate-zoom-in"
             onClick={closeFullscreen}
           >
             <img 
               src={fullscreenImage} 
               alt="Fullscreen view" 
-              className="max-w-full max-h-full object-contain"
+              className="max-w-full max-h-full object-contain animate-scale-in"
               onClick={(e) => e.stopPropagation()}
               onError={(e) => {
                 console.error('Fullscreen image error:', e);
@@ -482,10 +401,10 @@ const VisualGrid: React.FC = () => {
             <Button
               variant="secondary"
               size="sm"
-              className="absolute top-4 right-4"
+              className="absolute top-4 right-4 bg-white/90 hover:bg-white"
               onClick={closeFullscreen}
             >
-              Close
+              <X className="h-4 w-4" />
             </Button>
           </div>
         )}

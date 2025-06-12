@@ -154,6 +154,15 @@
     animation: zoom-out 0.3s ease-out forwards;
   }
 
+  /* Click zoom animation for grid items */
+  .zoom-click {
+    transition: transform 0.2s ease-out;
+  }
+
+  .zoom-click:active {
+    transform: scale(0.95);
+  }
+
   @keyframes fade-in {
     from {
       opacity: 0;
