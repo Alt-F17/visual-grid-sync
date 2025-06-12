@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import CryptoJS from 'crypto-js';
 import { Button } from '@/components/ui/button';
@@ -255,8 +254,7 @@ const VisualGrid: React.FC = () => {
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-slate-800 mb-2">Visual Grid</h1>
-          <p className="text-slate-600">Manage your visual assets with GitHub integration</p>
+          <h1 className="text-2xl font-bold text-slate-800 mb-2">Visual Grid</h1>
         </div>
 
         {/* Authentication Section */}
@@ -265,7 +263,7 @@ const VisualGrid: React.FC = () => {
             <Card className="w-full max-w-md mx-auto shadow-2xl border-0 bg-white/80 backdrop-blur-sm">
               <CardContent className="p-8">
                 <div className="text-center mb-8">
-                  <div className="mx-auto w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center mb-4 shadow-lg">
+                  <div className="mx-auto w-16 h-16 bg-black rounded-full flex items-center justify-center mb-4 shadow-lg">
                     <Lock className="h-8 w-8 text-white" />
                   </div>
                   <h2 className="text-2xl font-bold text-slate-800 mb-2">Access Required</h2>
