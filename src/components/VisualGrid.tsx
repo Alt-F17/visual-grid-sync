@@ -194,7 +194,9 @@ const VisualGrid: React.FC = () => {
             description: `${file.name} uploaded successfully`,
           });
 
-          // Refresh the visuals list after upload
+          // Delay before the refresh to ensure the upload is processed
+          await new Promise(resolve => setTimeout(resolve, 5000)); // 5 second delay
+          
           await fetchVisuals(pat);
           setFile(null);
         } catch (err) {
