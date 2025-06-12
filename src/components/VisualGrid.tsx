@@ -283,7 +283,7 @@ const VisualGrid: React.FC = () => {
                   <Button 
                     onClick={verifyKey} 
                     disabled={loading || !secretKey.trim()}
-                    className="w-full h-12 text-lg font-medium bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 transition-all duration-200 shadow-lg"
+                    className="w-full h-12 text-lg font-medium bg-black hover:bg-gray-800 text-white transition-all duration-200 shadow-lg"
                   >
                     {loading ? (
                       <div className="flex items-center gap-2">
