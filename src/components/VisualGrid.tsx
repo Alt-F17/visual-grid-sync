@@ -18,7 +18,7 @@ const VisualGrid: React.FC = () => {
   const [visuals, setVisuals] = useState<Visual[]>([]);
   const [secretKey, setSecretKey] = useState<string>('');
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [files, setFiles] = useState<File[]>([]);
+  const [file, setFile] = useState<File | null>(null);
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [isDragOver, setIsDragOver] = useState<boolean>(false);
@@ -132,20 +132,12 @@ const VisualGrid: React.FC = () => {
     }
   };
 
-  // helper to read file as base64
-  const readFileAsBase64 = (file: File): Promise<string> => new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = e => resolve((e.target?.result as string).split(',')[1]);
-    reader.onerror = () => reject(new Error('File read error'));
-    reader.readAsDataURL(file);
-  });
-
-  // Upload multiple files to GitHub
-  const uploadFiles = async () => {
-    if (files.length === 0) {
+  // Upload a file to GitHub
+  const uploadFile = async () => {
+    if (!file) {
       toast({
         title: "Error",
-        description: "Please select at least one file to upload",
+        description: "Please select a file to upload",
         variant: "destructive",
       });
       return;
@@ -172,60 +164,122 @@ const VisualGrid: React.FC = () => {
         return;
       }
 
-      // loop through all selected files
-      for (const file of files) {
-        if (!/\.(png|jpe?g|img)$/i.test(file.name)) continue;
-        const base64Content = await readFileAsBase64(file);
-         
-        const response = await fetch(
-           `https://api.github.com/repos/${repoOwner}/${repoName}/contents/${folderPath}/${file.name}`,
-           {
-             method: 'PUT',
-             headers: {
-               Authorization: `token ${pat}`,
-               'Content-Type': 'application/json',
-               Accept: 'application/vnd.github.v3+json',
-             },
-             body: JSON.stringify({
-               message: `Upload ${file.name}`,
-               content: base64Content,
-               sha: visuals.find(v => v.name === file.name)?.sha, // include sha for existing files
-             }),
-           }
-         );
-         
-         if (!response.ok) {
-           throw new Error(`Failed to upload ${file.name}: ${response.status} ${response.statusText}`);
-         }
-       }
-       
-       toast({
-         title: "Success",
-         description: "Files uploaded successfully",
-       });
-       setFiles([]); // clear files after upload
-       fetchVisuals(pat); // refresh visuals
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const content = e.target?.result as string;
+          const base64Content = content.split(',')[1];
+
+          const response = await fetch(
+            `https://api.github.com/repos/${repoOwner}/${repoName}/contents/${folderPath}/${file.name}`,
+            {
+              method: 'PUT',
+              headers: {
+                Authorization: `token ${pat}`,
+                Accept: 'application/vnd.github.v3+json',
+              },
+              body: JSON.stringify({
+                message: `Upload ${file.name}`,
+                content: base64Content,
+              }),
+            }
+          );
+
+          if (!response.ok) {
+            throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
+          }
+
+          toast({
+            title: "Success",
+            description: `${file.name} uploaded successfully`,
+          });
+
+          await fetchVisuals(pat);
+          setFile(null);
+        } catch (err) {
+          console.error('Upload error:', err);
+          toast({
+            title: "Error",
+            description: "Failed to upload file",
+            variant: "destructive",
+          });
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      reader.onerror = () => {
+        toast({
+          title: "Error",
+          description: "Failed to read file",
+          variant: "destructive",
+        });
+        setLoading(false);
+      };
+
+      reader.readAsDataURL(file);
     } catch (err) {
-      console.error('Upload files error:', err);
+      console.error('Upload preparation error:', err);
       toast({
         title: "Error",
-        description: "Failed to upload files",
+        description: "Failed to prepare file for upload",
         variant: "destructive",
       });
-    } finally {
       setLoading(false);
     }
   };
 
   // Handle drag and drop events
-  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => { e.preventDefault(); setIsDragOver(true); };
-  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => { e.preventDefault(); setIsDragOver(false); };
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault(); setIsDragOver(false);
-    const dropped = Array.from(e.dataTransfer.files as FileList)
-      .filter((f: File) => /\.(png|jpe?g|img)$/i.test(f.name));
-    if (dropped.length) { setFiles(dropped); toast({ title: 'Files ready', description: `Selected ${dropped.length} file(s)` }); }
-    else { toast({ title: 'Invalid file type', description: 'Only PNG, JPG, JPEG, IMG files allowed', variant: 'destructive' }); }
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    
+    const droppedFile = e.dataTransfer.files[0];
+    if (droppedFile && (droppedFile.type.startsWith('image/') || droppedFile.type === 'application/pdf')) {
+      setFile(droppedFile);
+      toast({
+        title: "File selected",
+        description: `${droppedFile.name} is ready to upload`,
+      });
+    } else {
+      toast({
+        title: "Invalid file type",
+        description: "Please drop an image or PDF file",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Handle fullscreen view with zoom animation
+  const openFullscreen = (url: string) => {
+    try {
+      setFullscreenImage(url);
+    } catch (err) {
+      console.error('Fullscreen error:', err);
+      toast({
+        title: "Error",
+        description: "Failed to open fullscreen view",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const closeFullscreen = () => {
+    try {
+      setFullscreenImage(null);
+    } catch (err) {
+      console.error('Close fullscreen error:', err);
+    }
   };
 
   return (
@@ -237,101 +291,141 @@ const VisualGrid: React.FC = () => {
     >
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="py-8 text-center">
-          <h1 className="text-4xl font-extrabold text-slate-900">
-            Visual Grid Sync
-          </h1>
-          <p className="mt-4 text-lg text-slate-600">
-            Securely sync and manage your visuals
-          </p>
+        <div className="text-center mb-8">
+          <h1 className="text-2xl font-bold text-slate-800 mb-2">Visual Grid</h1>
         </div>
 
         {/* Authentication Section */}
         {!isAuthenticated && (
-          <div className="mb-8 rounded-lg border bg-white p-6 shadow-md">
-            <h2 className="text-2xl font-bold text-slate-800">
-              Authenticate
-            </h2>
-            <p className="mt-2 text-slate-600">
-              Enter your secret key to access your visuals
-            </p>
-            <div className="mt-4 flex gap-2">
-              <Input
-                type="password"
-                placeholder="Secret Key"
-                value={secretKey}
-                onChange={(e) => setSecretKey(e.target.value)}
-                className="flex-1"
-              />
-              <Button
-                onClick={verifyKey}
-                disabled={loading}
-                className="flex-shrink-0"
-              >
-                {loading ? 'Verifying...' : 'Unlock'}
-              </Button>
-            </div>
+          <div className="flex items-center justify-center min-h-[60vh]">
+            <Card className="w-full max-w-md mx-auto shadow-2xl border-0 bg-white/80 backdrop-blur-sm">
+              <CardContent className="p-8">
+                <div className="text-center mb-8">
+                  <div className="mx-auto w-16 h-16 bg-black rounded-full flex items-center justify-center mb-4 shadow-lg">
+                    <Lock className="h-8 w-8 text-white" />
+                  </div>
+                  <h2 className="text-2xl font-bold text-slate-800 mb-2">Access Required</h2>
+                  <p className="text-slate-600">Enter your secret key to continue</p>
+                </div>
+                <div className="space-y-6">
+                  <div className="relative">
+                    <Input
+                      type="password"
+                      value={secretKey}
+                      onChange={(e) => setSecretKey(e.target.value)}
+                      placeholder="Enter secret key"
+                      className="w-full h-12 text-center text-lg tracking-wider border-2 border-slate-200 focus:border-blue-500 transition-colors"
+                      onKeyPress={(e) => e.key === 'Enter' && verifyKey()}
+                    />
+                  </div>
+                  <Button 
+                    onClick={verifyKey} 
+                    disabled={loading || !secretKey.trim()}
+                    className="w-full h-12 text-lg font-medium bg-black hover:bg-gray-800 text-white transition-all duration-200 shadow-lg"
+                  >
+                    {loading ? (
+                      <div className="flex items-center gap-2">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        Authenticating...
+                      </div>
+                    ) : 'Unlock Access'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         )}
 
         {/* Visuals Grid */}
         {isAuthenticated && (
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 auto-rows-fr max-h-[60vh] overflow-auto">
             {visuals.map((visual) => (
-              <div key={visual.sha} className="group relative overflow-hidden rounded-lg border bg-white shadow-md">
-                <img
-                  src={visual.download_url}
-                  alt={visual.name}
-                  className="h-32 w-full object-cover transition-transform duration-300 ease-in-out group-hover:scale-105"
-                />
-                <div className="p-4">
-                  <h3 className="text-lg font-semibold text-slate-800">
-                    {visual.name}
-                  </h3>
-                  <p className="mt-1 text-sm text-slate-600">
-                    SHA: {visual.sha}
-                  </p>
-                </div>
-                <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 opacity-0 transition-opacity duration-300 ease-in-out group-hover:opacity-100">
-                  <Button
-                    onClick={() => setFullscreenImage(visual.download_url)}
-                    className="rounded-full p-2 text-white shadow-md"
-                  >
-                    <img src="/icons/view.svg" alt="View" className="h-5 w-5" />
-                  </Button>
-                </div>
-              </div>
+              <Card key={visual.sha} className="group relative overflow-hidden hover:shadow-lg transition-all duration-300 border-0 bg-white/90">
+                <CardContent className="p-0 aspect-square">
+                  {visual.name.endsWith('.pdf') ? (
+                    <div 
+                      className="w-full h-full bg-red-50 flex items-center justify-center cursor-pointer transition-transform hover:scale-105"
+                      onClick={() => openFullscreen(visual.download_url)}
+                    >
+                      <span className="text-red-600 text-xs font-medium">PDF</span>
+                    </div>
+                  ) : (
+                    <img
+                      src={visual.download_url}
+                      alt={visual.name}
+                      className="w-full h-full object-cover cursor-pointer transition-transform hover:scale-105 zoom-click"
+                      onClick={() => openFullscreen(visual.download_url)}
+                      onError={(e) => {
+                        console.error('Image load error:', e);
+                        (e.target as HTMLImageElement).src = '/placeholder.svg';
+                      }}
+                    />
+                  )}
+                </CardContent>
+              </Card>
             ))}
           </div>
         )}
 
-        {/* Fullscreen Image Modal */}
-        {fullscreenImage && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75">
-            <div className="relative max-w-3xl rounded-lg overflow-hidden shadow-lg">
-              <img
-                src={fullscreenImage}
-                alt="Fullscreen Visual"
-                className="w-full h-auto"
-              />
-              <Button
-                onClick={() => setFullscreenImage(null)}
-                className="absolute top-4 right-4 rounded-full bg-white p-2 shadow-md"
-              >
-                <X className="h-6 w-6 text-slate-700" />
-              </Button>
+        {/* Loading State */}
+        {loading && (
+          <div className="text-center py-8">
+            <div className="inline-flex items-center gap-2 text-slate-600">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-slate-600"></div>
+              Processing...
             </div>
+          </div>
+        )}
+
+        {/* Empty State */}
+        {isAuthenticated && !loading && visuals.length === 0 && (
+          <div className="text-center py-12">
+            <p className="text-slate-500">No visuals found. Upload your first visual to get started!</p>
+          </div>
+        )}
+
+        {/* Fullscreen View */}
+        {fullscreenImage && (
+          <div 
+            className="fixed inset-0 bg-black/95 z-50 flex items-center justify-center p-4 animate-zoom-in cursor-pointer"
+            onClick={closeFullscreen}
+          >
+            <img 
+              src={fullscreenImage} 
+              alt="Fullscreen view" 
+              className="max-w-full max-h-full object-contain animate-scale-in cursor-pointer"
+              onClick={closeFullscreen}
+              onError={(e) => {
+                console.error('Fullscreen image error:', e);
+                closeFullscreen();
+                toast({
+                  title: "Error",
+                  description: "Failed to load image",
+                  variant: "destructive",
+                });
+              }}
+            />
+            <Button
+              variant="secondary"
+              size="sm"
+              className="absolute top-4 right-4 bg-white/90 hover:bg-white"
+              onClick={(e) => {
+                e.stopPropagation();
+                closeFullscreen();
+              }}
+            >
+              <X className="h-4 w-4" />
+            </Button>
           </div>
         )}
 
         {/* Floating Upload Icon and Panel */}
         {isAuthenticated && (
-          <div className="fixed bottom-4 right-4 z-50"
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-          >
-            <Button onClick={() => setShowUploadMenu(v => !v)} className="rounded-full p-3 shadow-lg bg-white">
+          <div className="fixed bottom-4 right-4 z-50">
+            <Button
+              onClick={() => setShowUploadMenu(v => !v)}
+              className="rounded-full p-3 shadow-lg bg-white"
+            >
               <Upload className="h-6 w-6 text-slate-700" />
             </Button>
             {(showUploadMenu || isDragOver) && (
@@ -339,31 +433,26 @@ const VisualGrid: React.FC = () => {
                 <CardContent className="p-4 w-64">
                   <Input
                     type="file"
-                    multiple
-                    accept=".png,.jpg,.jpeg,.img"
-                    onChange={e => {
-                      const sel = Array.from(e.target.files || []).filter((f: File) => /\.(png|jpe?g|img)$/i.test(f.name));
-                      setFiles(sel);
-                    }}
+                    accept="image/*,.pdf"
+                    onChange={(e) => setFile(e.target.files?.[0] || null)}
                     className="w-full cursor-pointer"
                   />
                   <Button
-                    onClick={uploadFiles}
-                    disabled={loading || files.length === 0}
+                    onClick={uploadFile}
+                    disabled={loading || !file}
                     className="mt-2 w-full flex items-center justify-center gap-2 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700"
                   >
                     <Upload className="h-4 w-4" />
-                    {loading ? 'Uploading...' : `Upload (${files.length})`}
+                    {loading ? 'Uploading...' : 'Upload'}
                   </Button>
                 </CardContent>
               </Card>
             )}
           </div>
         )}
-
       </div>
     </div>
   );
- };
+};
 
- export default VisualGrid;
+export default VisualGrid;
