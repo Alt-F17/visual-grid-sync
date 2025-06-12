@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import CryptoJS from 'crypto-js';
-import './VisualGrid.css'; // Assume a CSS file for styling
 
 // Define types for TypeScript
 interface Visual {
