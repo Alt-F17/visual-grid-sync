@@ -22,6 +22,7 @@ const VisualGrid: React.FC = () => {
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [isDragOver, setIsDragOver] = useState<boolean>(false);
+  const [showUploadMenu, setShowUploadMenu] = useState<boolean>(false);
   const { toast } = useToast();
 
   // Hardcoded encrypted PAT (generated separately)
@@ -282,7 +283,12 @@ const VisualGrid: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4">
+    <div
+      className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4"
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="text-center mb-8">
@@ -328,47 +334,6 @@ const VisualGrid: React.FC = () => {
               </CardContent>
             </Card>
           </div>
-        )}
-
-        {/* Upload Section */}
-        {isAuthenticated && (
-          <Card className="mb-8 shadow-lg border-0 bg-white/90">
-            <CardContent className="p-4">
-              <div className="flex flex-col sm:flex-row gap-4 items-end">
-                <div className="flex-1">
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Select File
-                  </label>
-                  <div
-                    className={`relative ${isDragOver ? 'bg-blue-50 border-blue-300' : 'bg-white border-slate-200'} border-2 border-dashed rounded-lg transition-colors`}
-                    onDragOver={handleDragOver}
-                    onDragLeave={handleDragLeave}
-                    onDrop={handleDrop}
-                  >
-                    <Input
-                      type="file"
-                      accept="image/*,.pdf"
-                      onChange={(e) => setFile(e.target.files?.[0] || null)}
-                      className="w-full cursor-pointer file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200 file:cursor-pointer"
-                    />
-                    {isDragOver && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-blue-50/90 rounded-lg">
-                        <p className="text-blue-600 font-medium">Drop file here</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <Button 
-                  onClick={uploadFile} 
-                  disabled={loading || !file}
-                  className="flex items-center gap-2 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700"
-                >
-                  <Upload className="h-4 w-4" />
-                  {loading ? 'Uploading...' : 'Upload'}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
         )}
 
         {/* Visuals Grid */}
@@ -451,6 +416,38 @@ const VisualGrid: React.FC = () => {
             >
               <X className="h-4 w-4" />
             </Button>
+          </div>
+        )}
+
+        {/* Floating Upload Icon and Panel */}
+        {isAuthenticated && (
+          <div className="fixed bottom-4 right-4 z-50">
+            <Button
+              onClick={() => setShowUploadMenu(v => !v)}
+              className="rounded-full p-3 shadow-lg bg-white"
+            >
+              <Upload className="h-6 w-6 text-slate-700" />
+            </Button>
+            {(showUploadMenu || isDragOver) && (
+              <Card className="mt-2 shadow-lg border-0 bg-white/90">
+                <CardContent className="p-4 w-64">
+                  <Input
+                    type="file"
+                    accept="image/*,.pdf"
+                    onChange={(e) => setFile(e.target.files?.[0] || null)}
+                    className="w-full cursor-pointer"
+                  />
+                  <Button
+                    onClick={uploadFile}
+                    disabled={loading || !file}
+                    className="mt-2 w-full flex items-center justify-center gap-2 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700"
+                  >
+                    <Upload className="h-4 w-4" />
+                    {loading ? 'Uploading...' : 'Upload'}
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
           </div>
         )}
       </div>
