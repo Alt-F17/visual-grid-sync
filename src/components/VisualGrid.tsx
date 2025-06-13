@@ -18,14 +18,14 @@ const VisualGrid: React.FC = () => {
   const [visuals, setVisuals] = useState<Visual[]>([]);
   const [secretKey, setSecretKey] = useState<string>('');
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [isDragOver, setIsDragOver] = useState<boolean>(false);
   const [showUploadMenu, setShowUploadMenu] = useState<boolean>(false);
   const { toast } = useToast();
 
-  // Hardcoded encrypted PAT (generated separately)
+  // Hardcoded encrypted PAT
   const encryptedPAT = 'U2FsdGVkX19oWeTSn+eeUryDHjI/zyXp8SViwjPqi104hlQa8cVVClKREJ81ugeV5Ye8+6BsWaboTRuItKaHuQ==';
   const repoOwner = 'Alt-F17';
   const repoName = 'visual-grid-sync';
@@ -132,9 +132,9 @@ const VisualGrid: React.FC = () => {
     }
   };
 
-  // Upload a file to GitHub
-  const uploadFile = async () => {
-    if (!file) {
+  // Upload multiple files to GitHub
+  const uploadFiles = async () => {
+    if (files.length === 0) {
       toast({
         title: "Error",
         description: "Please select a file to upload",
@@ -164,70 +164,49 @@ const VisualGrid: React.FC = () => {
         return;
       }
 
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        try {
-          const content = e.target?.result as string;
-          const base64Content = content.split(',')[1];
+      // helper: read file as base64
+      const toBase64 = (f: File) => new Promise<string>((res, rej) => {
+        const r = new FileReader();
+        r.onload = e => res((e.target?.result as string).split(',')[1]);
+        r.onerror = () => rej('Read error');
+        r.readAsDataURL(f);
+      });
+      
+      // upload each file
+      for (const f of files) {
+        const base64Content = await toBase64(f);
+        
+         const response = await fetch(
+           `https://api.github.com/repos/${repoOwner}/${repoName}/contents/${folderPath}/${f.name}`,
+           {
+             method: 'PUT',
+             headers: {
+               Authorization: `token ${pat}`,
+               Accept: 'application/vnd.github.v3+json',
+             },
+             body: JSON.stringify({ message: `Upload ${f.name}`, content: base64Content }),
+           }
+         );
 
-          const response = await fetch(
-            `https://api.github.com/repos/${repoOwner}/${repoName}/contents/${folderPath}/${file.name}`,
-            {
-              method: 'PUT',
-              headers: {
-                Authorization: `token ${pat}`,
-                Accept: 'application/vnd.github.v3+json',
-              },
-              body: JSON.stringify({
-                message: `Upload ${file.name}`,
-                content: base64Content,
-              }),
-            }
-          );
+         if (!response.ok) throw new Error(`Upload failed: ${response.status}`);
 
-          if (!response.ok) {
-            throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
-          }
-
-          toast({
-            title: "Success",
-            description: `${file.name} uploaded successfully`,
-          });
-
-          // Delay before the refresh to ensure the upload is processed
-          await new Promise(resolve => setTimeout(resolve, 5000)); // 5 second delay
-          
-          await fetchVisuals(pat);
-          setFile(null);
-        } catch (err) {
-          console.error('Upload error:', err);
-          toast({
-            title: "Error",
-            description: "Failed to upload file",
-            variant: "destructive",
-          });
-        } finally {
-          setLoading(false);
-        }
-      };
-
-      reader.onerror = () => {
-        toast({
-          title: "Error",
-          description: "Failed to read file",
-          variant: "destructive",
-        });
-        setLoading(false);
-      };
-
-      reader.readAsDataURL(file);
+         toast({
+           title: "Success",
+           description: `${f.name} uploaded successfully`,
+         });
+       }
+      
+      // refresh grid
+      await fetchVisuals(pat);
+      setFiles([]);
     } catch (err) {
-      console.error('Upload preparation error:', err);
+      console.error('Upload error:', err);
       toast({
         title: "Error",
-        description: "Failed to prepare file for upload",
+        description: "Failed to upload files",
         variant: "destructive",
       });
+    } finally {
       setLoading(false);
     }
   };
@@ -249,7 +228,7 @@ const VisualGrid: React.FC = () => {
     
     const droppedFile = e.dataTransfer.files[0];
     if (droppedFile && (droppedFile.type.startsWith('image/') || droppedFile.type === 'application/pdf')) {
-      setFile(droppedFile);
+      setFiles([droppedFile]);
       toast({
         title: "File selected",
         description: `${droppedFile.name} is ready to upload`,
@@ -436,17 +415,18 @@ const VisualGrid: React.FC = () => {
                 <CardContent className="p-4 w-64">
                   <Input
                     type="file"
-                    accept="image/*,.pdf"
-                    onChange={(e) => setFile(e.target.files?.[0] || null)}
+                    multiple
+                    accept=".png,.jpg,.jpeg,.img"
+                    onChange={e => setFiles(Array.from(e.target.files || []).filter(f => /\.(png|jpe?g|img)$/i.test(f.name)))}
                     className="w-full cursor-pointer"
                   />
                   <Button
-                    onClick={uploadFile}
-                    disabled={loading || !file}
+                    onClick={uploadFiles}
+                    disabled={loading || files.length === 0}
                     className="mt-2 w-full flex items-center justify-center gap-2 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700"
                   >
                     <Upload className="h-4 w-4" />
-                    {loading ? 'Uploading...' : 'Upload'}
+                    {loading ? 'Uploading...' : `Upload (${files.length})`}
                   </Button>
                 </CardContent>
               </Card>
